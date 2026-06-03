@@ -1,12 +1,20 @@
 #include <SFML/Graphics.hpp>
+#include <random>
+#include <iostream>
 #include <vector>
 #include <cmath>
-#include <random>
+#include <string>
+#include <fstream>
+#include <algorithm>
+#include <optional>
+#include <map>
+#include <unordered_map>
 
 std::mt19937 random_engine{std::random_device{}()};
 
 
 struct GLOBALS{
+	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
 	float radius=1;
 	float chunk_size=10;
 	float chunks_x=192;
@@ -14,6 +22,14 @@ struct GLOBALS{
 	int chunk_vector_size=chunks_x*chunks_y;
 };
 GLOBALS GLOBAL_VARIABLES;
+
+struct ASSETS{
+	sf::Font font;
+
+	void LOAD_ALL_ASSETS();
+};
+ASSETS GLOBAL_ASSETS;
+
 
 struct INPUT{
 	sf::Vector2f mouse_true_coords;
@@ -44,6 +60,28 @@ struct BALL{
 	sf::Vector2f speed{0.f,0.f};
 };
 
+struct PERFORMACE_COUNTER{
+	int FRAMES_COUNTER=0;
+	sf::Clock FPS_CLOCK;
+	sf::Time FPS_UPDATE_TIME=sf::milliseconds(500);
+	std::string FPS_STRING;
+
+	int UPDATES_COUNTER=0;
+	sf::Clock UPS_CLOCK;
+	sf::Time UPS_UPDATE_TIME=sf::milliseconds(500);
+	std::string UPS_STRING;
+	sf::Text FPS_UPS_RENDER_TEXT{GLOBAL_ASSETS.font};
+	
+	void SETUP();
+
+	void FPS_UPDATE();
+
+	void UPS_UPDATE();
+
+	void DRAW(sf::RenderWindow& window);
+
+};
+
 
 
 struct GAME{
@@ -59,40 +97,60 @@ struct GAME{
 	std::uniform_real_distribution<float> rand_x_vel{-50.f, 50.f};
     std::uniform_real_distribution<float> rand_y_vel{-50.f, 50.f};
 
+	PERFORMACE_COUNTER performance_clocks; 
 
-	void SETUP(){
-		CREATE_CIRCLE_TEXTURE();
-		for (int i=0;i<100000;i++){
-			GENERATE_RANDOM_BALL();
-		}
-	}	
 
+	
 	void RUN(){
 		SETUP();
+		float time_accumulator=0;
+		float tick_speed=1;
+		float delta_time=1.f/60.f;
+		sf::Clock delta_clock;
 		while (window.isOpen()){
-			UPDATE_INPUT();
-			UPDATE_PHYSICS();
+			float elapsed=delta_clock.restart().asSeconds()*tick_speed;
+			time_accumulator+=elapsed;
+			for (;time_accumulator>=delta_time;time_accumulator-=delta_time){
+				UPDATE_INPUT();
+				UPDATE_PHYSICS();
+			}	
+			performance_clocks.FPS_UPDATE();
 			DRAW();
 		}
 	}
+
+	void SETUP(){
+		performance_clocks.SETUP();
+		GLOBAL_ASSETS.LOAD_ALL_ASSETS();
+		//window.setVerticalSyncEnabled(true);
+		CREATE_CIRCLE_TEXTURE();
+		for (int i=0;i<400000;i++){
+			GENERATE_RANDOM_BALL();
+		}
+	}	
 
 	void UPDATE_INPUT(){
 		input.read(window);
 	}
 
 	void UPDATE_PHYSICS(){
-		
+		performance_clocks.UPS_UPDATE();
 	}
 	
 	void DRAW(){
 		window.clear();
 		DRAW_BALLS();
+		DRAW_CURSOR();
+		performance_clocks.DRAW(window);
+		window.display();
+	}
+
+	void DRAW_CURSOR(){
 		sf::CircleShape cursor(100.f);
-		cursor.setFillColor(sf::Color::Green);
+		cursor.setFillColor(sf::Color::Cyan);
 		cursor.setPosition(input.mouse_true_coords);
 		cursor.setOrigin({100.f,100.f});
 		window.draw(cursor);
-		window.display();
 	}
 
 	void DRAW_BALLS();
@@ -112,6 +170,9 @@ struct GAME{
 
 
 
+void ASSETS::LOAD_ALL_ASSETS(){
+		if (!font.openFromFile("assets/fonts/arial.ttf")){std::cout<<"font failed to load";} 
+	}
 
 
 
@@ -160,6 +221,40 @@ void INPUT::read(sf::RenderWindow& window){
 
 
 
+
+
+
+	void PERFORMACE_COUNTER::SETUP(){
+		FPS_CLOCK.restart();
+		UPS_CLOCK.restart();
+		FPS_UPS_RENDER_TEXT.setCharacterSize(50);
+		FPS_UPS_RENDER_TEXT.setPosition({1690.f,0.f});
+		FPS_UPS_RENDER_TEXT.setFillColor(sf::Color::Green);
+	} 
+
+	void PERFORMACE_COUNTER::FPS_UPDATE(){
+		FRAMES_COUNTER++;
+		if (FPS_CLOCK.getElapsedTime()>FPS_UPDATE_TIME){
+			FPS_STRING=std::to_string(int(FRAMES_COUNTER*(sf::milliseconds(1000)/FPS_UPDATE_TIME)));
+			FRAMES_COUNTER=0;
+			FPS_CLOCK.restart();
+		}
+	}
+
+	void PERFORMACE_COUNTER::UPS_UPDATE(){
+		UPDATES_COUNTER++;
+		if (UPS_CLOCK.getElapsedTime()>UPS_UPDATE_TIME){
+			UPS_STRING=std::to_string(int(UPDATES_COUNTER*(sf::milliseconds(1000)/UPS_UPDATE_TIME)));
+			UPDATES_COUNTER=0;
+			UPS_CLOCK.restart();
+		}
+	}
+
+	void PERFORMACE_COUNTER::DRAW(sf::RenderWindow& window){
+		window.setView(GLOBAL_VARIABLES.default_view);
+		FPS_UPS_RENDER_TEXT.setString("FPS/UPS\n"+FPS_STRING+"/"+UPS_STRING);
+		window.draw(FPS_UPS_RENDER_TEXT);
+	}
 
 
 
