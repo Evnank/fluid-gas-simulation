@@ -16,6 +16,10 @@ std::mt19937 random_engine{std::random_device{}()};
 struct GLOBALS{
 	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
 	float radius=1;
+	float tick_speed=1;
+	float max_ticks_per_frame=10;
+	int amount_of_balls_at_spawn=10000;
+
 	float chunk_size=10;
 	float chunks_x=192;
 	float chunks_y=108;
@@ -44,6 +48,10 @@ struct INPUT{
 	bool F1,F2,F9;
 
 	void read(sf::RenderWindow& window);
+};
+
+struct WALL{
+	sf::FloatRect rect;
 };
 
 
@@ -85,75 +93,59 @@ struct PERFORMACE_COUNTER{
 
 
 struct GAME{
-	sf::RenderWindow window{sf::VideoMode({ 1920, 1080 }), "fluid simulation"};
+	sf::RenderWindow window{sf::VideoMode({ 1920, 1000 }), "fluid simulation"};
 	INPUT input;
 	std::vector <CHUNK> chunks{size_t(GLOBAL_VARIABLES.chunk_vector_size)};
 	std::vector <BALL> balls;
 	sf::Texture circle_texture;
+	std::vector <WALL> walls;
 
-	std::uniform_real_distribution<float> rand_x_cord{0.f, 1920.f};
-    std::uniform_real_distribution<float> rand_y_cord{0.f, 1080.f};
+	std::uniform_real_distribution<float> rand_x_cord{50.f, 1870.f};
+    std::uniform_real_distribution<float> rand_y_cord{50.f, 1020.f};
 
-	std::uniform_real_distribution<float> rand_x_vel{-50.f, 50.f};
-    std::uniform_real_distribution<float> rand_y_vel{-50.f, 50.f};
+	std::uniform_real_distribution<float> rand_x_vel{-2.f, 2.f};
+    std::uniform_real_distribution<float> rand_y_vel{-2.f, 2.f};
 
 	PERFORMACE_COUNTER performance_clocks; 
 
 
 	
-	void RUN(){
-		SETUP();
-		float time_accumulator=0;
-		float tick_speed=1;
-		float delta_time=1.f/60.f;
-		sf::Clock delta_clock;
-		while (window.isOpen()){
-			float elapsed=delta_clock.restart().asSeconds()*tick_speed;
-			time_accumulator+=elapsed;
-			for (;time_accumulator>=delta_time;time_accumulator-=delta_time){
-				UPDATE_INPUT();
-				UPDATE_PHYSICS();
-			}	
-			performance_clocks.FPS_UPDATE();
-			DRAW();
-		}
-	}
+	void RUN();
 
 	void SETUP(){
+		LOAD_WALLS();
 		performance_clocks.SETUP();
 		GLOBAL_ASSETS.LOAD_ALL_ASSETS();
 		//window.setVerticalSyncEnabled(true);
 		CREATE_CIRCLE_TEXTURE();
-		for (int i=0;i<400000;i++){
+		for (int i=0;i<GLOBAL_VARIABLES.amount_of_balls_at_spawn;i++){
 			GENERATE_RANDOM_BALL();
 		}
 	}	
 
-	void UPDATE_INPUT(){
-		input.read(window);
-	}
+	void UPDATE_INPUT();
 
 	void UPDATE_PHYSICS(){
 		performance_clocks.UPS_UPDATE();
-	}
-	
-	void DRAW(){
-		window.clear();
-		DRAW_BALLS();
-		DRAW_CURSOR();
-		performance_clocks.DRAW(window);
-		window.display();
+		for (auto& cur_ball:balls){
+			cur_ball.coords+=cur_ball.speed;	
+		}
+		BALL_TO_WALL_COLLISION();
 	}
 
-	void DRAW_CURSOR(){
-		sf::CircleShape cursor(100.f);
-		cursor.setFillColor(sf::Color::Cyan);
-		cursor.setPosition(input.mouse_true_coords);
-		cursor.setOrigin({100.f,100.f});
-		window.draw(cursor);
-	}
+	void BALL_TO_WALL_COLLISION();
+
+	void WALL_AGAINSS_BALL(BALL& cur_ball,WALL& cur_wall);
+	
+	void DRAW();
+
+	void DRAW_CURSOR();
+
+	void DRAW_WALLS();
 
 	void DRAW_BALLS();
+
+	void LOAD_WALLS();
 
 	void CREATE_CIRCLE_TEXTURE();
 
@@ -263,6 +255,110 @@ void INPUT::read(sf::RenderWindow& window){
 
 
 
+	void GAME::RUN(){
+		SETUP();
+		float time_accumulator=0;
+		float delta_time=1.f/60.f;
+		sf::Clock delta_clock;
+		float max_time_accumulator=delta_time*GLOBAL_VARIABLES.max_ticks_per_frame;
+		while (window.isOpen()){
+			float elapsed=delta_clock.restart().asSeconds()*GLOBAL_VARIABLES.tick_speed;
+			time_accumulator+=elapsed;
+			if (time_accumulator>max_time_accumulator){time_accumulator=max_time_accumulator;}
+			UPDATE_INPUT();
+			for (;time_accumulator>=delta_time;time_accumulator-=delta_time){
+				UPDATE_PHYSICS();
+			}	
+			performance_clocks.FPS_UPDATE();
+			DRAW();
+		}
+	}
+
+	void GAME::UPDATE_INPUT(){
+		input.read(window);
+	}
+
+	void GAME::BALL_TO_WALL_COLLISION(){
+		for (auto& cur_ball:balls){
+			for (auto&cur_wall:walls){
+				WALL_AGAINSS_BALL(cur_ball,cur_wall);
+			}
+		}
+	}
+
+	void GAME::WALL_AGAINSS_BALL(BALL& cur_ball,WALL& cur_wall){
+		sf::FloatRect ball_rect{{cur_ball.coords},{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
+
+		if (ball_rect.findIntersection(cur_wall.rect)){
+			float overlapleft=abs(cur_ball.coords.x-(cur_wall.rect.position.x+cur_wall.rect.size.x));
+			float overlapright=abs(cur_ball.coords.x+GLOBAL_VARIABLES.radius*2-cur_wall.rect.position.x);
+			float overlapx=std::min(overlapleft,overlapright);
+
+			float overlaptop=abs(cur_ball.coords.y-(cur_wall.rect.position.y+cur_wall.rect.size.y));
+			float overlapbottom=abs(cur_ball.coords.y+GLOBAL_VARIABLES.radius*2-cur_wall.rect.position.y);
+			float overlapy=std::min(overlaptop,overlapbottom);
+
+			if (overlapx<overlapy){
+				cur_ball.speed.x*=-1;
+				if (overlapleft<overlapright){
+					cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
+				} else{
+					cur_ball.coords.x=cur_wall.rect.position.x-GLOBAL_VARIABLES.radius*2;
+				}
+			} else {
+				cur_ball.speed.y*=-1;
+				if (overlaptop<overlapbottom){
+					cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
+				} else{
+					cur_ball.coords.y=cur_wall.rect.position.y-GLOBAL_VARIABLES.radius*2;
+				}
+			}
+		}
+	}
+
+	void GAME::DRAW(){
+		window.clear();
+		DRAW_WALLS();
+		DRAW_BALLS();
+		DRAW_CURSOR();
+		performance_clocks.DRAW(window);
+		window.display();
+	}
+
+
+	void GAME::DRAW_CURSOR(){
+		sf::CircleShape cursor(50.f);
+		cursor.setFillColor(sf::Color::Cyan);
+		cursor.setPosition(input.mouse_true_coords);
+		cursor.setOrigin({50.f,50.f});
+		window.draw(cursor);
+	}
+
+	void GAME::DRAW_WALLS(){
+		sf::Texture wall_texture;
+		sf::VertexArray vertexes(sf::PrimitiveType::Triangles);
+		sf::Color color=sf::Color(40,40,40,255);
+		sf::CircleShape shape(GLOBAL_VARIABLES.radius);
+
+		float texture_len=wall_texture.getSize().x;
+		float texture_wid=wall_texture.getSize().y;
+
+		for (auto& cur_wall:walls){
+			float left=cur_wall.rect.position.x;
+			float top=cur_wall.rect.position.y;
+			float right=left+cur_wall.rect.size.x;
+			float bottom=top+cur_wall.rect.size.y;
+
+			vertexes.append(sf::Vertex({left,top},color,{0.f,0.f}));
+			vertexes.append(sf::Vertex({right,top},color,{texture_len,0.f}));
+			vertexes.append(sf::Vertex({left,bottom},color,{0.f,texture_wid}));
+
+			vertexes.append(sf::Vertex({left,bottom},color,{0.f,texture_wid}));
+			vertexes.append(sf::Vertex({right,top},color,{texture_len,0.f}));
+			vertexes.append(sf::Vertex({right,bottom},color,{texture_len,texture_wid}));
+		}
+		window.draw(vertexes,&wall_texture);
+	}
 
 	void GAME::DRAW_BALLS(){
 		sf::VertexArray vertexes(sf::PrimitiveType::Triangles);
@@ -286,6 +382,18 @@ void INPUT::read(sf::RenderWindow& window){
 			vertexes.append(sf::Vertex({right,bottom},color,{texture_len,texture_wid}));
 		}
 		window.draw(vertexes,&circle_texture);
+	}
+
+	void GAME::LOAD_WALLS(){
+		WALL cur_wall;
+		cur_wall.rect=sf::FloatRect({0.f,0.f},{1920.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({1870.f,50.f},{50.f,1020.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({0.f,1030.f},{1920.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({0.f,50.f},{50.f,1030.f});
+		walls.push_back(cur_wall);
 	}
 
 	void GAME::CREATE_CIRCLE_TEXTURE(){
