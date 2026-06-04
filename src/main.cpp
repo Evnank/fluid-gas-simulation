@@ -16,11 +16,11 @@ std::mt19937 random_engine{std::random_device{}()};
 struct GLOBALS{
 	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
 	float radius=1;
-	float tick_speed=5000;  //around 250 is max
+	float tick_speed=1;  //around 250 is max
 	//float max_ticks_per_frame=1000;
 	float max_ticks_per_frame=tick_speed+10;
-	int amount_of_balls_at_spawn=10000;
-
+	int amount_of_balls_at_spawn=10;
+	bool FULLSCREEN_MODE=true;
 	float chunk_size=10;
 	float chunks_x=192;
 	float chunks_y=108;
@@ -94,18 +94,18 @@ struct PERFORMACE_COUNTER{
 
 
 struct GAME{
-	sf::RenderWindow window{sf::VideoMode({ 1920, 1000 }), "fluid simulation"};
+	sf::RenderWindow window{sf::VideoMode({ 1920, 1000 }), "fluid simulation",sf::State::Windowed};
 	INPUT input;
 	std::vector <CHUNK> chunks{size_t(GLOBAL_VARIABLES.chunk_vector_size)};
 	std::vector <BALL> balls;
 	sf::Texture circle_texture;
 	std::vector <WALL> walls;
 
-	std::uniform_real_distribution<float> rand_x_cord{50.f, 1870.f};
+	std::uniform_real_distribution<float> rand_x_cord{900.f, 1150.f};
     std::uniform_real_distribution<float> rand_y_cord{50.f, 1020.f};
 
-	std::uniform_real_distribution<float> rand_x_vel{-2.f, 2.f};
-    std::uniform_real_distribution<float> rand_y_vel{-2.f, 2.f};
+	std::uniform_real_distribution<float> rand_x_vel{1.f, 2.f};
+    std::uniform_real_distribution<float> rand_y_vel{1.f, 2.f};
 
 	PERFORMACE_COUNTER performance_clocks; 
 
@@ -118,6 +118,7 @@ struct GAME{
 		performance_clocks.SETUP();
 		GLOBAL_ASSETS.LOAD_ALL_ASSETS();
 		//window.setVerticalSyncEnabled(true);
+		if (GLOBAL_VARIABLES.FULLSCREEN_MODE){window.create(sf::VideoMode({ 1920, 1080 }), "fluid simulation",sf::State::Fullscreen);}
 		CREATE_CIRCLE_TEXTURE();
 		for (int i=0;i<GLOBAL_VARIABLES.amount_of_balls_at_spawn;i++){
 			GENERATE_RANDOM_BALL();
@@ -289,30 +290,34 @@ void INPUT::read(sf::RenderWindow& window){
 	}
 
 	void GAME::WALL_AGAINSS_BALL(BALL& cur_ball,WALL& cur_wall){
-		sf::FloatRect ball_rect{{cur_ball.coords},{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
+		sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
+		auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
+		if (the_intersection.has_value()){
+			sf::FloatRect cur_intersection=the_intersection.value();
 
-		if (ball_rect.findIntersection(cur_wall.rect)){
-			float overlapleft=abs(cur_ball.coords.x-(cur_wall.rect.position.x+cur_wall.rect.size.x));
-			float overlapright=abs(cur_ball.coords.x+GLOBAL_VARIABLES.radius*2-cur_wall.rect.position.x);
-			float overlapx=std::min(overlapleft,overlapright);
+			float overlapx=cur_intersection.size.x;
+			float overlapy=cur_intersection.size.y;
 
-			float overlaptop=abs(cur_ball.coords.y-(cur_wall.rect.position.y+cur_wall.rect.size.y));
-			float overlapbottom=abs(cur_ball.coords.y+GLOBAL_VARIABLES.radius*2-cur_wall.rect.position.y);
-			float overlapy=std::min(overlaptop,overlapbottom);
+			sf::Vector2f wall_center=cur_wall.rect.position+cur_wall.rect.size/2.f;
+			sf::Vector2f ball_center=cur_ball.coords+sf::Vector2f{GLOBAL_VARIABLES.radius,GLOBAL_VARIABLES.radius};
 
 			if (overlapx<overlapy){
-				cur_ball.speed.x*=-1;
-				if (overlapleft<overlapright){
-					cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
-				} else{
+				if (ball_center.x<wall_center.x){
+					cur_ball.speed.x=-abs(cur_ball.speed.x);
 					cur_ball.coords.x=cur_wall.rect.position.x-GLOBAL_VARIABLES.radius*2;
+					
+				} else{
+					cur_ball.speed.x=abs(cur_ball.speed.x);
+					cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
 				}
 			} else {
-				cur_ball.speed.y*=-1;
-				if (overlaptop<overlapbottom){
-					cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
-				} else{
+				if (ball_center.y<wall_center.y){
+					cur_ball.speed.y=-abs(cur_ball.speed.y);
 					cur_ball.coords.y=cur_wall.rect.position.y-GLOBAL_VARIABLES.radius*2;
+					
+				} else{
+					cur_ball.speed.y=abs(cur_ball.speed.y);
+					cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
 				}
 			}
 		}
@@ -396,6 +401,17 @@ void INPUT::read(sf::RenderWindow& window){
 		walls.push_back(cur_wall);
 		cur_wall.rect=sf::FloatRect({0.f,50.f},{50.f,1030.f});
 		walls.push_back(cur_wall);
+
+
+		cur_wall.rect=sf::FloatRect({800.f,400.f},{400.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({1150.f,450.f},{50.f,200.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({900.f,600.f},{300.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({850.f,500.f},{50.f,150.f});
+		walls.push_back(cur_wall);
+
 	}
 
 	void GAME::CREATE_CIRCLE_TEXTURE(){
