@@ -16,8 +16,9 @@ std::mt19937 random_engine{std::random_device{}()};
 struct GLOBALS{
 	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
 	float radius=1;
-	float tick_speed=1;
-	float max_ticks_per_frame=10;
+	float tick_speed=5000;  //around 250 is max
+	//float max_ticks_per_frame=1000;
+	float max_ticks_per_frame=tick_speed+10;
 	int amount_of_balls_at_spawn=10000;
 
 	float chunk_size=10;
@@ -268,6 +269,7 @@ void INPUT::read(sf::RenderWindow& window){
 			UPDATE_INPUT();
 			for (;time_accumulator>=delta_time;time_accumulator-=delta_time){
 				UPDATE_PHYSICS();
+				if (delta_clock.getElapsedTime().asSeconds()>delta_time*0.7){time_accumulator=0;break;}
 			}	
 			performance_clocks.FPS_UPDATE();
 			DRAW();
