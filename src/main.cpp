@@ -16,10 +16,10 @@ std::mt19937 random_engine{std::random_device{}()};
 struct GLOBALS{
 	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
 	float radius=1;
-	float tick_speed=1;  //around 250 is max
+	float tick_speed=1;  
 	//float max_ticks_per_frame=1000;
 	float max_ticks_per_frame=tick_speed+10;
-	int amount_of_balls_at_spawn=10;
+	int amount_of_balls_at_spawn=100000;
 	bool FULLSCREEN_MODE=true;
 	float chunk_size=10;
 	float chunks_x=192;
@@ -101,11 +101,11 @@ struct GAME{
 	sf::Texture circle_texture;
 	std::vector <WALL> walls;
 
-	std::uniform_real_distribution<float> rand_x_cord{900.f, 1150.f};
-    std::uniform_real_distribution<float> rand_y_cord{50.f, 1020.f};
+	std::uniform_real_distribution<float> rand_x_cord{910.f, 1060.f};
+    std::uniform_real_distribution<float> rand_y_cord{460.f, 570.f};
 
-	std::uniform_real_distribution<float> rand_x_vel{1.f, 2.f};
-    std::uniform_real_distribution<float> rand_y_vel{1.f, 2.f};
+	std::uniform_real_distribution<float> rand_x_vel{-4.f, 4.f};
+    std::uniform_real_distribution<float> rand_y_vel{-4.f, 4.f};
 
 	PERFORMACE_COUNTER performance_clocks; 
 
@@ -130,14 +130,18 @@ struct GAME{
 	void UPDATE_PHYSICS(){
 		performance_clocks.UPS_UPDATE();
 		for (auto& cur_ball:balls){
-			cur_ball.coords+=cur_ball.speed;	
-		}
-		BALL_TO_WALL_COLLISION();
+			cur_ball.coords.x+=cur_ball.speed.x;	
+			BALL_TO_WALL_COLLISION_X(cur_ball);
+			cur_ball.coords.y+=cur_ball.speed.y;	
+			BALL_TO_WALL_COLLISION_Y(cur_ball);
+		}	
 	}
 
-	void BALL_TO_WALL_COLLISION();
+	void BALL_TO_WALL_COLLISION_X(BALL& cur_ball);
+	void BALL_TO_WALL_COLLISION_Y(BALL& cur_ball);
 
-	void WALL_AGAINSS_BALL(BALL& cur_ball,WALL& cur_wall);
+	void WALL_AGAINSS_BALL_X(BALL& cur_ball,WALL& cur_wall);
+	void WALL_AGAINSS_BALL_Y(BALL& cur_ball,WALL& cur_wall);
 	
 	void DRAW();
 
@@ -281,46 +285,52 @@ void INPUT::read(sf::RenderWindow& window){
 		input.read(window);
 	}
 
-	void GAME::BALL_TO_WALL_COLLISION(){
-		for (auto& cur_ball:balls){
+	void GAME::BALL_TO_WALL_COLLISION_X(BALL& cur_ball){
 			for (auto&cur_wall:walls){
-				WALL_AGAINSS_BALL(cur_ball,cur_wall);
+				WALL_AGAINSS_BALL_X(cur_ball,cur_wall);
 			}
-		}
 	}
 
-	void GAME::WALL_AGAINSS_BALL(BALL& cur_ball,WALL& cur_wall){
-		sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
-		auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
-		if (the_intersection.has_value()){
-			sf::FloatRect cur_intersection=the_intersection.value();
-
-			float overlapx=cur_intersection.size.x;
-			float overlapy=cur_intersection.size.y;
-
-			sf::Vector2f wall_center=cur_wall.rect.position+cur_wall.rect.size/2.f;
-			sf::Vector2f ball_center=cur_ball.coords+sf::Vector2f{GLOBAL_VARIABLES.radius,GLOBAL_VARIABLES.radius};
-
-			if (overlapx<overlapy){
-				if (ball_center.x<wall_center.x){
-					cur_ball.speed.x=-abs(cur_ball.speed.x);
-					cur_ball.coords.x=cur_wall.rect.position.x-GLOBAL_VARIABLES.radius*2;
-					
-				} else{
-					cur_ball.speed.x=abs(cur_ball.speed.x);
-					cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
-				}
-			} else {
-				if (ball_center.y<wall_center.y){
-					cur_ball.speed.y=-abs(cur_ball.speed.y);
-					cur_ball.coords.y=cur_wall.rect.position.y-GLOBAL_VARIABLES.radius*2;
-					
-				} else{
-					cur_ball.speed.y=abs(cur_ball.speed.y);
-					cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
-				}
+	void GAME::BALL_TO_WALL_COLLISION_Y(BALL& cur_ball){
+			for (auto&cur_wall:walls){
+				WALL_AGAINSS_BALL_Y(cur_ball,cur_wall);
 			}
-		}
+	}
+
+	void GAME::WALL_AGAINSS_BALL_X(BALL& cur_ball,WALL& cur_wall){
+  			sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
+  		 	auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
+ 	 	if (the_intersection.has_value()){
+			sf::FloatRect cur_intersection=the_intersection.value();
+			
+    		float ball_center=cur_ball.coords.x+GLOBAL_VARIABLES.radius;
+			float wall_center=cur_wall.rect.position.x+cur_wall.rect.size.x/2.f;
+			if (ball_center>wall_center){
+				cur_ball.speed.x=abs(cur_ball.speed.x);
+				cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
+			} else {
+				cur_ball.speed.x=-abs(cur_ball.speed.x);
+				cur_ball.coords.x=cur_wall.rect.position.x-GLOBAL_VARIABLES.radius*2;
+			}
+  	  	}
+	}
+
+	void GAME::WALL_AGAINSS_BALL_Y(BALL& cur_ball,WALL& cur_wall){
+  			sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
+  		 	auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
+ 	 	if (the_intersection.has_value()){
+			sf::FloatRect cur_intersection=the_intersection.value();
+			
+    		float ball_center=cur_ball.coords.y+GLOBAL_VARIABLES.radius;
+			float wall_center=cur_wall.rect.position.y+cur_wall.rect.size.y/2.f;
+			if (ball_center>wall_center){
+				cur_ball.speed.y=abs(cur_ball.speed.y);
+				cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
+			} else {
+				cur_ball.speed.y=-abs(cur_ball.speed.y);
+				cur_ball.coords.y=cur_wall.rect.position.y-GLOBAL_VARIABLES.radius*2;
+			}
+  	  	}
 	}
 
 	void GAME::DRAW(){
@@ -395,17 +405,24 @@ void INPUT::read(sf::RenderWindow& window){
 		WALL cur_wall;
 		cur_wall.rect=sf::FloatRect({0.f,0.f},{1920.f,50.f});
 		walls.push_back(cur_wall);
-		cur_wall.rect=sf::FloatRect({1870.f,50.f},{50.f,1020.f});
+		cur_wall.rect=sf::FloatRect({1870.f,0.f},{50.f,1080.f});
 		walls.push_back(cur_wall);
 		cur_wall.rect=sf::FloatRect({0.f,1030.f},{1920.f,50.f});
 		walls.push_back(cur_wall);
-		cur_wall.rect=sf::FloatRect({0.f,50.f},{50.f,1030.f});
+		cur_wall.rect=sf::FloatRect({0.f,0.f},{50.f,1080.f});
 		walls.push_back(cur_wall);
 
-
-		cur_wall.rect=sf::FloatRect({800.f,400.f},{400.f,50.f});
+		
+		cur_wall.rect=sf::FloatRect({750.f,400.f},{50.f,400.f});
 		walls.push_back(cur_wall);
-		cur_wall.rect=sf::FloatRect({1150.f,450.f},{50.f,200.f});
+		cur_wall.rect=sf::FloatRect({800.f,750.f},{200.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({1000.f,700.f},{50.f,100.f});
+		walls.push_back(cur_wall);
+
+		cur_wall.rect=sf::FloatRect({750.f,400.f},{450.f,50.f});
+		walls.push_back(cur_wall);
+		cur_wall.rect=sf::FloatRect({1150.f,400.f},{50.f,250.f});
 		walls.push_back(cur_wall);
 		cur_wall.rect=sf::FloatRect({900.f,600.f},{300.f,50.f});
 		walls.push_back(cur_wall);
