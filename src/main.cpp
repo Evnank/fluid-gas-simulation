@@ -19,7 +19,7 @@ struct GLOBALS{
 	float tick_speed=1;  
 	//float max_ticks_per_frame=1000;
 	float max_ticks_per_frame=tick_speed+10;
-	int amount_of_balls_at_spawn=100000;
+	int amount_of_balls_at_spawn=10000;
 	bool FULLSCREEN_MODE=true;
 	float chunk_size=10;
 	float chunks_x=192;
@@ -30,6 +30,7 @@ GLOBALS GLOBAL_VARIABLES;
 
 struct ASSETS{
 	sf::Font font;
+	sf::Texture ball_texture;
 
 	void LOAD_ALL_ASSETS();
 };
@@ -98,7 +99,6 @@ struct GAME{
 	INPUT input;
 	std::vector <CHUNK> chunks{size_t(GLOBAL_VARIABLES.chunk_vector_size)};
 	std::vector <BALL> balls;
-	sf::Texture circle_texture;
 	std::vector <WALL> walls;
 
 	std::uniform_real_distribution<float> rand_x_cord{910.f, 1060.f};
@@ -119,7 +119,6 @@ struct GAME{
 		GLOBAL_ASSETS.LOAD_ALL_ASSETS();
 		//window.setVerticalSyncEnabled(true);
 		if (GLOBAL_VARIABLES.FULLSCREEN_MODE){window.create(sf::VideoMode({ 1920, 1080 }), "fluid simulation",sf::State::Fullscreen);}
-		CREATE_CIRCLE_TEXTURE();
 		for (int i=0;i<GLOBAL_VARIABLES.amount_of_balls_at_spawn;i++){
 			GENERATE_RANDOM_BALL();
 		}
@@ -153,8 +152,6 @@ struct GAME{
 
 	void LOAD_WALLS();
 
-	void CREATE_CIRCLE_TEXTURE();
-
 	void GENERATE_RANDOM_BALL();
 };
 
@@ -170,6 +167,7 @@ struct GAME{
 
 void ASSETS::LOAD_ALL_ASSETS(){
 		if (!font.openFromFile("assets/fonts/arial.ttf")){std::cout<<"font failed to load";} 
+		if (!ball_texture.loadFromFile("assets/textures/Circle.png")){}
 	}
 
 
@@ -382,8 +380,8 @@ void INPUT::read(sf::RenderWindow& window){
 		sf::Color color=sf::Color::Blue;
 		sf::CircleShape shape(GLOBAL_VARIABLES.radius);
 
-		float texture_len=circle_texture.getSize().x;
-			float texture_wid=circle_texture.getSize().y;
+		float texture_len=GLOBAL_ASSETS.ball_texture.getSize().x;
+			float texture_wid=GLOBAL_ASSETS.ball_texture.getSize().y;
 		for (auto& cur_ball:balls){
 			float left=cur_ball.coords.x;
 			float top=cur_ball.coords.y;
@@ -398,7 +396,7 @@ void INPUT::read(sf::RenderWindow& window){
 			vertexes.append(sf::Vertex({right,top},color,{texture_len,0.f}));
 			vertexes.append(sf::Vertex({right,bottom},color,{texture_len,texture_wid}));
 		}
-		window.draw(vertexes,&circle_texture);
+		window.draw(vertexes,&GLOBAL_ASSETS.ball_texture);
 	}
 
 	void GAME::LOAD_WALLS(){
@@ -429,30 +427,6 @@ void INPUT::read(sf::RenderWindow& window){
 		cur_wall.rect=sf::FloatRect({850.f,500.f},{50.f,150.f});
 		walls.push_back(cur_wall);
 
-	}
-
-	void GAME::CREATE_CIRCLE_TEXTURE(){
-		float cur_radius=200;
-		unsigned int cur_size=cur_radius*2;
-
-		sf::RenderTexture render_circle_texture(sf::Vector2u{cur_size,cur_size});
-		render_circle_texture.clear();
-
-		sf::CircleShape circle_shape(cur_radius,64);
-		circle_shape.setFillColor(sf::Color::White);
-		circle_shape.setPosition({0.f,0.f});
-
-
-		render_circle_texture.draw(circle_shape);
-		render_circle_texture.display();
-
-		sf::Texture cur_texture;
-		if (!cur_texture.loadFromImage(render_circle_texture.getTexture().copyToImage())){}
-		
-	
-		cur_texture.setSmooth(true);
-
-		circle_texture=cur_texture;
 	}
 
 	void GAME::GENERATE_RANDOM_BALL(){
