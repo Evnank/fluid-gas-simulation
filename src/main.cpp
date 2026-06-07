@@ -19,7 +19,7 @@ struct GLOBALS{
 	float tick_speed=1;  
 	//float max_ticks_per_frame=1000;
 	float max_ticks_per_frame=tick_speed+10;
-	int amount_of_balls_at_spawn=10000;
+	int amount_of_balls_at_spawn=100000;
 	bool FULLSCREEN_MODE=true;
 	float chunk_size=10;
 	float chunks_x=192;
