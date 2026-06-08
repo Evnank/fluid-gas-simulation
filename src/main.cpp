@@ -15,16 +15,20 @@ std::mt19937 random_engine{std::random_device{}()};
 
 struct GLOBALS{
 	sf::View default_view=sf::View(sf::FloatRect({0,0},{1920,1080}));
-	float radius=1;
-	float tick_speed=1;  
+	float radius=10;
+	float collision_distance_sq=radius*radius*4;
+	float tick_speed=0.1;  
 	//float max_ticks_per_frame=1000;
 	float max_ticks_per_frame=tick_speed+10;
-	int amount_of_balls_at_spawn=100000;
+	int amount_of_balls_at_spawn=30;
 	bool FULLSCREEN_MODE=true;
 	float chunk_size=10;
 	float chunks_x=192;
 	float chunks_y=108;
 	int chunk_vector_size=chunks_x*chunks_y;
+
+	float wall_hit_efficiency=1;
+	float gravity_power=0;
 };
 GLOBALS GLOBAL_VARIABLES;
 
@@ -60,8 +64,7 @@ struct WALL{
 
 
 struct CHUNK{
-	int size=0;
-	int indexes[35];
+	std::vector<int> indexes;
 };
 
 
@@ -126,15 +129,55 @@ struct GAME{
 
 	void UPDATE_INPUT();
 
-	void UPDATE_PHYSICS(){
-		performance_clocks.UPS_UPDATE();
-		for (auto& cur_ball:balls){
-			cur_ball.coords.x+=cur_ball.speed.x;	
-			BALL_TO_WALL_COLLISION_X(cur_ball);
-			cur_ball.coords.y+=cur_ball.speed.y;	
-			BALL_TO_WALL_COLLISION_Y(cur_ball);
-		}	
+	void UPDATE_PHYSICS();
+
+	void APPLY_GRAVITY();
+
+	void CHUNK_FILLING();
+
+	void BALL_TO_BALL_LOOP();
+
+	void CHECK_CHUNK_TO_CHUNK_COLLISION(CHUNK& chunk1,CHUNK& chunk2){
+		float radius=GLOBAL_VARIABLES.radius;
+		for (int i=0;i<chunk1.indexes.size();i++){
+			BALL& ball1=balls[chunk1.indexes[i]];
+			for (int g=0;g<chunk2.indexes.size();g++){
+
+
+				BALL& ball2=balls[chunk2.indexes[g]];
+
+				if (ball1.coords==ball2.coords){continue;}
+				sf::Vector2f between_vector=ball2.coords-ball1.coords;
+				float distance_sq=between_vector.lengthSquared();
+
+				if (distance_sq<0.01f){continue;}
+				if (distance_sq>GLOBAL_VARIABLES.collision_distance_sq){continue;}
+				float distance=(sqrt(distance_sq));
+				sf::Vector2f normal=between_vector/distance;
+				float vel1new=ball1.speed.dot(normal);
+				float vel2new=ball2.speed.dot(normal);
+				float vel_add=vel2new-vel1new;
+				float overlap=radius*2-distance;
+				sf::Vector2f coords_add=normal*overlap/2.f;
+
+				ball1.coords.x-=coords_add.x;
+				BALL_TO_WALL_COLLISION_X(ball1);
+				ball1.coords.y-=coords_add.y;
+				BALL_TO_WALL_COLLISION_Y(ball1);
+
+				ball2.coords.x+=coords_add.x;
+				BALL_TO_WALL_COLLISION_X(ball2);
+				ball2.coords.y+=coords_add.y;
+				BALL_TO_WALL_COLLISION_Y(ball2);
+				ball2.coords+=normal*distance/2.f;
+
+				//ball1.speed+=normal*vel_add;
+				//ball2.speed-=normal*vel_add;
+			}
+		}
 	}
+
+	void CHECK_OUT_OF_BOUNDS(BALL& cur_ball);
 
 	void BALL_TO_WALL_COLLISION_X(BALL& cur_ball);
 	void BALL_TO_WALL_COLLISION_Y(BALL& cur_ball);
@@ -154,6 +197,13 @@ struct GAME{
 
 	void GENERATE_RANDOM_BALL();
 };
+
+
+
+
+
+
+
 
 
 
@@ -283,6 +333,74 @@ void INPUT::read(sf::RenderWindow& window){
 		input.read(window);
 	}
 
+	void GAME::UPDATE_PHYSICS(){
+		performance_clocks.UPS_UPDATE();
+		APPLY_GRAVITY();
+		for (auto& cur_ball:balls){
+			cur_ball.coords.x+=cur_ball.speed.x;	
+			BALL_TO_WALL_COLLISION_X(cur_ball);
+			cur_ball.coords.y+=cur_ball.speed.y;	
+			BALL_TO_WALL_COLLISION_Y(cur_ball);
+			CHECK_OUT_OF_BOUNDS(cur_ball);
+		}	
+		CHUNK_FILLING();
+		BALL_TO_BALL_LOOP();
+
+	}
+
+	void GAME::APPLY_GRAVITY(){
+		for (auto& cur_ball:balls){
+			cur_ball.speed.y+=GLOBAL_VARIABLES.gravity_power;
+		}
+	}
+
+	void GAME::CHUNK_FILLING(){
+		for (auto& cur_chunk:chunks){
+			cur_chunk.indexes.clear();
+		}
+		for (int i=0;i<balls.size();i++){
+			BALL& cur_ball=balls[i];
+			int cur_x=int(cur_ball.coords.x)/GLOBAL_VARIABLES.chunk_size;
+			int cur_y=int(cur_ball.coords.y)/GLOBAL_VARIABLES.chunk_size;
+			chunks[cur_x+cur_y*GLOBAL_VARIABLES.chunks_x].indexes.push_back(i);
+		}
+	}
+
+	void GAME::BALL_TO_BALL_LOOP(){
+		int ch_x=GLOBAL_VARIABLES.chunks_x;
+		int ch_y=GLOBAL_VARIABLES.chunks_y;
+		for (int chunk1_x=0;chunk1_x<ch_x;chunk1_x++){
+			for (int chunk1_y=0;chunk1_y<ch_y;chunk1_y++){
+						CHUNK& chunk1=chunks[chunk1_x+chunk1_y*ch_x];
+						CHECK_CHUNK_TO_CHUNK_COLLISION(chunk1,chunk1);
+
+						if (chunk1_x<ch_x-1){
+							CHUNK& chunk2=chunks[chunk1_x+1+chunk1_y*ch_x];
+							CHECK_CHUNK_TO_CHUNK_COLLISION(chunk1,chunk2);
+						}
+						if (chunk1_y<ch_y-1){
+							CHUNK& chunk2=chunks[chunk1_x+(chunk1_y+1)*ch_x];
+							CHECK_CHUNK_TO_CHUNK_COLLISION(chunk1,chunk2);
+						}
+						if (chunk1_y<ch_y-1 && chunk1_x<ch_x-1){
+							CHUNK& chunk2=chunks[chunk1_x+1+(chunk1_y+1)*ch_x];
+							CHECK_CHUNK_TO_CHUNK_COLLISION(chunk1,chunk2);
+						}	
+						if (chunk1_y<ch_y-1 && chunk1_x>0){
+							CHUNK& chunk2=chunks[chunk1_x-1+(chunk1_y+1)*ch_x];
+							CHECK_CHUNK_TO_CHUNK_COLLISION(chunk1,chunk2);
+						}	
+			}
+		}
+	}
+
+	void GAME::CHECK_OUT_OF_BOUNDS(BALL& cur_ball){
+			if (cur_ball.coords.x<0){cur_ball.coords.x=0;}
+			if (cur_ball.coords.x>GLOBAL_VARIABLES.chunk_size*GLOBAL_VARIABLES.chunks_x){cur_ball.coords.x=GLOBAL_VARIABLES.chunk_size*GLOBAL_VARIABLES.chunks_x-1;}
+			if (cur_ball.coords.y<0){cur_ball.coords.y=0;}
+			if (cur_ball.coords.y>GLOBAL_VARIABLES.chunk_size*GLOBAL_VARIABLES.chunks_y){cur_ball.coords.y=GLOBAL_VARIABLES.chunk_size*GLOBAL_VARIABLES.chunks_y-1;}
+	}
+
 	void GAME::BALL_TO_WALL_COLLISION_X(BALL& cur_ball){
 			for (auto&cur_wall:walls){
 				WALL_AGAINSS_BALL_X(cur_ball,cur_wall);
@@ -296,6 +414,7 @@ void INPUT::read(sf::RenderWindow& window){
 	}
 
 	void GAME::WALL_AGAINSS_BALL_X(BALL& cur_ball,WALL& cur_wall){
+			float wallefc=GLOBAL_VARIABLES.wall_hit_efficiency;
   			sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
   		 	auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
  	 	if (the_intersection.has_value()){
@@ -304,16 +423,17 @@ void INPUT::read(sf::RenderWindow& window){
     		float ball_center=cur_ball.coords.x+GLOBAL_VARIABLES.radius;
 			float wall_center=cur_wall.rect.position.x+cur_wall.rect.size.x/2.f;
 			if (ball_center>wall_center){
-				cur_ball.speed.x=abs(cur_ball.speed.x);
+				cur_ball.speed.x=abs(cur_ball.speed.x)*wallefc;
 				cur_ball.coords.x=cur_wall.rect.position.x+cur_wall.rect.size.x;
 			} else {
-				cur_ball.speed.x=-abs(cur_ball.speed.x);
+				cur_ball.speed.x=-abs(cur_ball.speed.x)*wallefc;
 				cur_ball.coords.x=cur_wall.rect.position.x-GLOBAL_VARIABLES.radius*2;
 			}
   	  	}
 	}
 
 	void GAME::WALL_AGAINSS_BALL_Y(BALL& cur_ball,WALL& cur_wall){
+			float wallefc=GLOBAL_VARIABLES.wall_hit_efficiency;
   			sf::FloatRect ball_rect{cur_ball.coords,sf::Vector2f{GLOBAL_VARIABLES.radius*2,GLOBAL_VARIABLES.radius*2}};
   		 	auto the_intersection=ball_rect.findIntersection(cur_wall.rect);
  	 	if (the_intersection.has_value()){
@@ -322,10 +442,10 @@ void INPUT::read(sf::RenderWindow& window){
     		float ball_center=cur_ball.coords.y+GLOBAL_VARIABLES.radius;
 			float wall_center=cur_wall.rect.position.y+cur_wall.rect.size.y/2.f;
 			if (ball_center>wall_center){
-				cur_ball.speed.y=abs(cur_ball.speed.y);
+				cur_ball.speed.y=abs(cur_ball.speed.y)*wallefc;
 				cur_ball.coords.y=cur_wall.rect.position.y+cur_wall.rect.size.y;
 			} else {
-				cur_ball.speed.y=-abs(cur_ball.speed.y);
+				cur_ball.speed.y=-abs(cur_ball.speed.y)*wallefc;
 				cur_ball.coords.y=cur_wall.rect.position.y-GLOBAL_VARIABLES.radius*2;
 			}
   	  	}
